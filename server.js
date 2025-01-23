@@ -4,9 +4,38 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const tmi = require('tmi.js');
+const archiver = require('archiver');
+const path = require('path');
 
 // Serve static files
 app.use(express.static(__dirname));
+
+// Download endpoint
+app.get('/download', (req, res) => {
+  const archive = archiver('zip', {
+    zlib: { level: 9 } // Maximum compression
+  });
+
+  res.attachment('twitch-bot.zip');
+  archive.pipe(res);
+
+  // Add project files to the zip
+  const filesToZip = [
+    'package.json',
+    'server.js',
+    'client.js',
+    'styles.css',
+    'index.html',
+    'README.md',
+    '.env.example' // We'll include this instead of .env
+  ];
+
+  filesToZip.forEach(file => {
+    archive.file(file, { name: file });
+  });
+
+  archive.finalize();
+});
 
 // Twitch bot configuration
 const twitchClient = new tmi.Client({
