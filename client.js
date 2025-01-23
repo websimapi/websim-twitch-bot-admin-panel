@@ -2,6 +2,29 @@ const socket = io('ws://localhost:3000');
 const botStatus = document.getElementById('botStatus');
 const channelName = document.getElementById('channelName');
 const logContainer = document.getElementById('logContainer');
+const downloadBtn = document.querySelector('.download-btn');
+
+downloadBtn.addEventListener('click', async (e) => {
+  e.preventDefault();
+  try {
+    const response = await fetch('/download');
+    if (!response.ok) throw new Error('Download failed');
+    
+    // Create blob from response and trigger download
+    const blob = await response.blob();
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'twitch-bot.zip';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    window.URL.revokeObjectURL(url);
+  } catch (error) {
+    console.error('Download error:', error);
+    alert('Download failed. Please try again.');
+  }
+});
 
 socket.on('connect', () => {
   console.log('Connected to WebSocket server');

@@ -4,37 +4,65 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const tmi = require('tmi.js');
-const archiver = require('archiver');
+const fs = require('fs');
 const path = require('path');
+const archiver = require('archiver');
 
 // Serve static files
 app.use(express.static(__dirname));
 
-// Download endpoint
+// Download endpoint with improved error handling
 app.get('/download', (req, res) => {
-  const archive = archiver('zip', {
-    zlib: { level: 9 } // Maximum compression
-  });
+  try {
+    const output = fs.createWriteStream(path.join(__dirname, 'twitch-bot.zip'));
+    const archive = archiver('zip', {
+      zlib: { level: 9 }
+    });
 
-  res.attachment('twitch-bot.zip');
-  archive.pipe(res);
+    output.on('close', function() {
+      const zipPath = path.join(__dirname, 'twitch-bot.zip');
+      res.download(zipPath, 'twitch-bot.zip', (err) => {
+        if (err) {
+          console.error('Download error:', err);
+          res.status(500).send('Download failed');
+        }
+        // Clean up: delete the zip file after download
+        fs.unlink(zipPath, (err) => {
+          if (err) console.error('Error deleting zip:', err);
+        });
+      });
+    });
 
-  // Add project files to the zip
-  const filesToZip = [
-    'package.json',
-    'server.js',
-    'client.js',
-    'styles.css',
-    'index.html',
-    'README.md',
-    '.env.example' // We'll include this instead of .env
-  ];
+    archive.on('error', function(err) {
+      console.error('Archive error:', err);
+      res.status(500).send('Archive creation failed');
+    });
 
-  filesToZip.forEach(file => {
-    archive.file(file, { name: file });
-  });
+    archive.pipe(output);
 
-  archive.finalize();
+    // Add files to the zip
+    const filesToZip = [
+      { name: 'package.json', path: './package.json' },
+      { name: 'server.js', path: './server.js' },
+      { name: 'client.js', path: './client.js' },
+      { name: 'styles.css', path: './styles.css' },
+      { name: 'index.html', path: './index.html' },
+      { name: 'README.md', path: './README.md' },
+      { name: '.env.example', path: './.env.example' }
+    ];
+
+    filesToZip.forEach(file => {
+      if (fs.existsSync(file.path)) {
+        archive.file(file.path, { name: file.name });
+      }
+    });
+
+    archive.finalize();
+
+  } catch (error) {
+    console.error('Server error:', error);
+    res.status(500).send('Server error occurred');
+  }
 });
 
 // Twitch bot configuration
