@@ -4,66 +4,73 @@ const app = express();
 const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const tmi = require('tmi.js');
-const fs = require('fs');
-const path = require('path');
 const archiver = require('archiver');
 
 // Serve static files
 app.use(express.static(__dirname));
 
-// Download endpoint with improved error handling
-app.get('/download', (req, res) => {
-  try {
-    const output = fs.createWriteStream(path.join(__dirname, 'twitch-bot.zip'));
-    const archive = archiver('zip', {
-      zlib: { level: 9 }
-    });
+// Project file templates
+const projectFiles = {
+  'package.json': JSON.stringify({
+    "name": "twitch-bot",
+    "version": "1.0.0",
+    "description": "Twitch bot with admin panel",
+    "main": "server.js",
+    "scripts": {
+      "start": "node server.js",
+      "dev": "nodemon server.js"
+    },
+    "dependencies": {
+      "dotenv": "^10.0.0",
+      "express": "^4.17.1",
+      "socket.io": "^4.5.1",
+      "tmi.js": "^1.8.5"
+    },
+    "devDependencies": {
+      "nodemon": "^2.0.15"
+    }
+  }, null, 2),
 
-    output.on('close', function() {
-      const zipPath = path.join(__dirname, 'twitch-bot.zip');
-      res.download(zipPath, 'twitch-bot.zip', (err) => {
-        if (err) {
-          console.error('Download error:', err);
-          res.status(500).send('Download failed');
-        }
-        // Clean up: delete the zip file after download
-        fs.unlink(zipPath, (err) => {
-          if (err) console.error('Error deleting zip:', err);
-        });
-      });
-    });
+  'README.md': `# Twitch Bot with Admin Panel
 
-    archive.on('error', function(err) {
-      console.error('Archive error:', err);
-      res.status(500).send('Archive creation failed');
-    });
+A simple Twitch bot with a web-based admin panel for monitoring bot activity and channel messages.
 
-    archive.pipe(output);
+## Features
 
-    // Add files to the zip
-    const filesToZip = [
-      { name: 'package.json', path: './package.json' },
-      { name: 'server.js', path: './server.js' },
-      { name: 'client.js', path: './client.js' },
-      { name: 'styles.css', path: './styles.css' },
-      { name: 'index.html', path: './index.html' },
-      { name: 'README.md', path: './README.md' },
-      { name: '.env.example', path: './.env.example' }
-    ];
+- Real-time monitoring of bot connection status
+- Live chat message display
+- Basic command support (!hello)
+- Web-based admin interface
+- WebSocket-based real-time updates
 
-    filesToZip.forEach(file => {
-      if (fs.existsSync(file.path)) {
-        archive.file(file.path, { name: file.name });
-      }
-    });
+## Prerequisites
 
-    archive.finalize();
+- Node.js (v12 or higher)
+- npm (Node Package Manager)
+- A Twitch account for the bot
+- Twitch OAuth token
 
-  } catch (error) {
-    console.error('Server error:', error);
-    res.status(500).send('Server error occurred');
-  }
-});
+## Setup
+
+1. Clone or download this repository
+2. Run \`npm install\` to install dependencies
+3. Create a \`.env\` file with your Twitch bot credentials:
+   - BOT_USERNAME=your_bot_username
+   - OAUTH_TOKEN=oauth:your_oauth_token
+   - CHANNEL_NAME=your_channel_name
+   - PORT=3000
+4. Run \`npm start\` to start the bot
+5. Open http://localhost:3000 in your browser to access the admin panel`,
+
+  'server.js': `require('dotenv').config();
+const express = require('express');
+const app = express();
+const http = require('http').createServer(app);
+const io = require('socket.io')(http);
+const tmi = require('tmi.js');
+
+// Serve static files
+app.use(express.static(__dirname));
 
 // Twitch bot configuration
 const twitchClient = new tmi.Client({
@@ -101,17 +108,34 @@ twitchClient.on('disconnected', () => {
 twitchClient.on('message', (channel, tags, message, self) => {
   if (self) return; // Ignore messages from the bot
   
-  io.emit('logMessage', `${tags['display-name']}: ${message}`);
+  io.emit('logMessage', \`\${tags['display-name']}: \${message}\`);
   
   // Add your bot commands here
   if (message.toLowerCase() === '!hello') {
-    twitchClient.say(channel, `Hello @${tags['display-name']}!`);
-    io.emit('logMessage', `Bot responded to ${tags['display-name']}'s hello command`);
+    twitchClient.say(channel, \`Hello @\${tags['display-name']}!\`);
+    io.emit('logMessage', \`Bot responded to \${tags['display-name']}'s hello command\`);
   }
+});
+
+// Download endpoint
+app.get('/download', (req, res) => {
+  const archive = archiver('zip', {
+    zlib: { level: 9 }
+  });
+
+  res.attachment('twitch-bot.zip');
+  archive.pipe(res);
+
+  // Add files to the archive from our templates
+  for (const [filename, content] of Object.entries(projectFiles)) {
+    archive.append(content, { name: filename });
+  }
+
+  archive.finalize();
 });
 
 // Start server
 const PORT = process.env.PORT || 3000;
 http.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(\`Server running on port \${PORT}\`);
 });
